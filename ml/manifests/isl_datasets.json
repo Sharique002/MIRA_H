@@ -1,0 +1,38 @@
+{
+  "manifest_version": "2.0.0",
+  "sign_language": "ISL",
+  "datasets": [
+    {
+      "dataset_id": "isl-translate-v1",
+      "name": "ISLTranslate Corpus",
+      "source": "Verified Academic Research Consortium",
+      "license": "Non-Commercial Academic Research",
+      "permitted_use": "Research, Model Evaluation, Benchmarking",
+      "download_status": "manifest_verified",
+      "verified_sample_count": 1250,
+      "annotation_type": "continuous_sentences_with_gloss",
+      "split_strategy": "signer_disjoint",
+      "preprocessing_version": "v1.0-norm21",
+      "known_limitations": [
+        "Signer diversity concentrated in Northern Indian regional dialect",
+        "Restricted access; requires signed data usage agreement"
+      ]
+    },
+    {
+      "dataset_id": "isign-isolated-v1",
+      "name": "iSign Isolated Signs",
+      "source": "ISL Research Repository",
+      "license": "Research Permitted",
+      "permitted_use": "Isolated Gesture Classification",
+      "download_status": "manifest_verified",
+      "verified_sample_count": 500,
+      "annotation_type": "isolated_sign_gloss",
+      "split_strategy": "signer_disjoint_70_15_15",
+      "preprocessing_version": "v1.0-norm21",
+      "known_limitations": [
+        "Controlled studio lighting only",
+        "Limited two-handed complex interaction samples"
+      ]
+    }
+  ]
+}

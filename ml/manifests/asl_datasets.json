@@ -1,0 +1,37 @@
+{
+  "manifest_version": "2.0.0",
+  "sign_language": "ASL",
+  "datasets": [
+    {
+      "dataset_id": "asl-citizen-v1",
+      "name": "ASL Citizen",
+      "source": "Microsoft Research / University of Washington",
+      "license": "CC BY 4.0",
+      "permitted_use": "Commercial and Non-Commercial with Attribution",
+      "download_status": "manifest_verified",
+      "verified_sample_count": 83000,
+      "annotation_type": "isolated_signs",
+      "split_strategy": "signer_disjoint_official",
+      "preprocessing_version": "v1.0-norm21",
+      "known_limitations": [
+        "Crowdsourced webcam variance in focal length and angles",
+        "Signer speed varies significantly across age groups"
+      ]
+    },
+    {
+      "dataset_id": "how2sign-multimodal-v1",
+      "name": "How2Sign Multimodal Dataset",
+      "source": "Carnegie Mellon University",
+      "license": "Academic Research Use",
+      "permitted_use": "Continuous Sign Sequence Modeling",
+      "download_status": "manifest_verified",
+      "verified_sample_count": 31000,
+      "annotation_type": "continuous_sentence_multimodal",
+      "split_strategy": "signer_disjoint_predefined",
+      "preprocessing_version": "v1.0-norm21",
+      "known_limitations": [
+        "Instructional topic bias (how-to tutorials only)"
+      ]
+    }
+  ]
+}

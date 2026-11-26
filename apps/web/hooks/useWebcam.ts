@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { resolveWebcamError } from '../services/apiError';
 
 export interface UseWebcamReturn {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -37,7 +38,8 @@ export function useWebcam(): UseWebcamReturn {
         setSelectedDeviceId(videoDevices[0].deviceId);
       }
     } catch {
-      // Ignored
+      // Device enumeration errors must remain non-fatal to camera startup; reset stale list cleanly.
+      setDevices([]);
     }
   }, [selectedDeviceId]);
 
@@ -98,19 +100,11 @@ export function useWebcam(): UseWebcamReturn {
       updateDeviceList();
     } catch (err: unknown) {
       setIsStreaming(false);
-      const errName =
-        typeof err === 'object' && err !== null && 'name' in err
-          ? String((err as { name: unknown }).name)
-          : '';
-      const errMsg = err instanceof Error ? err.message : '';
-      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+      const resolved = resolveWebcamError(err);
+      if (resolved.denied) {
         setPermissionStatus('denied');
-        setErrorMessage('Camera access was denied. Please grant camera permission in your browser address bar.');
-      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
-        setErrorMessage('No camera device detected on this system.');
-      } else {
-        setErrorMessage(`Camera error: ${errMsg || 'Unable to open camera.'}`);
       }
+      setErrorMessage(resolved.message);
     }
   }, [selectedDeviceId, updateDeviceList]);
 

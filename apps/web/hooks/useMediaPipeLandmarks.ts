@@ -113,7 +113,9 @@ export function useMediaPipeLandmarks(
         try {
           landmarkerRef.current.close();
         } catch {
-          // Ignored
+          landmarkerRef.current = null;
+        } finally {
+          landmarkerRef.current = null;
         }
       }
     };
@@ -178,7 +180,8 @@ export function useMediaPipeLandmarks(
         };
         setLatestPayload(payload);
       } catch {
-        // Ignored frame error
+        setHands([]);
+        setIsProcessing(false);
       }
     }
 

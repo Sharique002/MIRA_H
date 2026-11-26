@@ -1,4 +1,4 @@
-import {
+import type {
   ResponseEnvelope,
   SessionData,
   RecognitionPredictResponse,
@@ -10,14 +10,63 @@ import {
   SignLanguage,
   SpokenLanguage
 } from '../types';
+import {
+  extractApiErrorMessage,
+  formatHttpStatusTag,
+  isAbortError,
+  sanitizeNetworkErrorMessage,
+  validateResponseEnvelope,
+} from './apiError';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-class ApiClient {
-  private baseUrl: string;
+class ApiClientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
+}
 
-  constructor() {
-    this.baseUrl = API_BASE_URL.replace(/\/+$/, '');
+async function readResponseTextWithAbort(
+  response: Response,
+  signal: AbortSignal,
+  httpTag: string
+): Promise<string> {
+  if (signal.aborted) {
+    throw new DOMException('The operation was aborted', 'AbortError');
+  }
+
+  return await new Promise<string>((resolveText, rejectText) => {
+    const onAbort = () => {
+      rejectText(new DOMException('The operation was aborted', 'AbortError'));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    response.text().then(
+      (text) => {
+        signal.removeEventListener('abort', onAbort);
+        resolveText(text);
+      },
+      (err: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        if (signal.aborted || isAbortError(err)) {
+          rejectText(new DOMException('The operation was aborted', 'AbortError'));
+          return;
+        }
+        rejectText(new ApiClientError(`Failed to read API response body (${httpTag}).`));
+      }
+    );
+  });
+}
+
+export class ApiClient {
+  private baseUrl: string;
+  private timeoutMs: number;
+
+  constructor(options?: { baseUrl?: string; timeoutMs?: number }) {
+    this.baseUrl = (options?.baseUrl ?? API_BASE_URL).replace(/\/+$/, '');
+    this.timeoutMs = options?.timeoutMs ?? 10000;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ResponseEnvelope<T>> {
@@ -28,7 +77,7 @@ class ApiClient {
     };
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
       const response = await fetch(url, {
@@ -40,33 +89,41 @@ class ApiClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      const httpTag = formatHttpStatusTag(response.status, response.statusText);
+      const rawText = await readResponseTextWithAbort(response, controller.signal, httpTag);
 
-      const json = await response.json();
-      if (!response.ok) {
-        const detailMsg =
-          typeof json.detail === 'string'
-            ? json.detail
-            : Array.isArray(json.detail)
-            ? json.detail
-                .map((d: unknown) =>
-                  typeof d === 'object' && d !== null && 'msg' in d
-                    ? String((d as { msg: unknown }).msg)
-                    : JSON.stringify(d)
-                )
-                .join('; ')
-            : undefined;
-        throw new Error(
-          json.error?.message || detailMsg || `API Error: ${response.status} ${response.statusText}`
-        );
+      let json: unknown = null;
+      if (rawText.trim().length > 0) {
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          if (!response.ok) {
+            throw new ApiClientError(`API Error (${httpTag}).`);
+          }
+          throw new ApiClientError(`Received malformed JSON response from backend API (${httpTag}).`);
+        }
       }
+
+      if (!response.ok) {
+        throw new ApiClientError(extractApiErrorMessage(json, response.status, response.statusText));
+      }
+
+      const validated = validateResponseEnvelope(json, response.status, response.statusText);
+      if (!validated.valid) {
+        throw new ApiClientError(validated.errorMessage);
+      }
+
       return json as ResponseEnvelope<T>;
     } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error('API Request timed out after 10000ms');
+      if (isAbortError(err)) {
+        throw new Error(`API Request timed out after ${this.timeoutMs}ms`);
       }
-      throw err;
+      if (err instanceof ApiClientError) {
+        throw err;
+      }
+      throw new Error(sanitizeNetworkErrorMessage(err));
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

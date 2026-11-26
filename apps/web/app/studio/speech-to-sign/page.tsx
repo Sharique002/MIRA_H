@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageSquare, Mic, MicOff, Sparkles, AlertTriangle } from 'lucide-react';
 import { AvatarViewport } from '../../../components/avatar/AvatarViewport';
 import { buildSequenceTimeline, hasPlayableDuration } from '../../../components/avatar/keyframeTimeline';
@@ -11,6 +11,16 @@ import { Card } from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { ErrorState, UnsupportedFeatureNotice } from '../../../components/ui/FeedbackStates';
 import { apiClient } from '../../../services/api';
+import { getErrorMessage } from '../../../services/apiError';
+import {
+  BrowserSpeechRecognition,
+  BrowserSpeechRecognitionErrorEvent,
+  BrowserSpeechRecognitionEvent,
+  SpeechRecognitionWindowLike,
+  formatSpeechRecognitionError,
+  getSpeechRecognitionConstructor,
+  resolveSpeechRecognitionLocale,
+} from '../../../services/speechRecognition';
 import {
   SignLanguage,
   SpokenLanguage,
@@ -78,8 +88,24 @@ export default function SpeechToSignStudioPage() {
     [sequence]
   );
 
-  // Microphone ASR integration
+  // Microphone ASR integration (null until browser capability is verified after mount)
   const [isListening, setIsListening] = useState(false);
+  const [asrSupported, setAsrSupported] = useState<boolean | null>(null);
+  const [asrError, setAsrError] = useState<string | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ctor = getSpeechRecognitionConstructor(
+      window as unknown as SpeechRecognitionWindowLike
+    );
+    setAsrSupported(Boolean(ctor));
+
+    return () => {
+      recognitionRef.current?.abort?.();
+      recognitionRef.current = null;
+    };
+  }, []);
 
   // Tracks active target-language generation cycles so stale in-flight results
   // from a previous targetSignLanguage cannot populate state after switching.
@@ -182,7 +208,7 @@ export default function SpeechToSignStudioPage() {
     } catch (err: unknown) {
       if (activeCycle !== requestCycleRef.current) return;
       clearGeneratedState();
-      setApiError(err instanceof Error ? err.message : 'Unable to generate reverse sign sequence.');
+      setApiError(getErrorMessage(err, 'Unable to generate reverse sign sequence.'));
     } finally {
       if (activeCycle === requestCycleRef.current) {
         setIsLoading(false);
@@ -194,55 +220,72 @@ export default function SpeechToSignStudioPage() {
   const toggleListening = () => {
     if (typeof window === 'undefined') return;
 
-    interface BrowserSpeechRecognitionEvent {
-      results: ArrayLike<ArrayLike<{ transcript: string }>>;
-    }
-    interface BrowserSpeechRecognition {
-      lang: string;
-      continuous: boolean;
-      interimResults: boolean;
-      onstart: (() => void) | null;
-      onend: (() => void) | null;
-      onerror: (() => void) | null;
-      onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-      start: () => void;
-    }
-    type SpeechRecognitionCtor = new () => BrowserSpeechRecognition;
-    const speechWindow = window as unknown as {
-      SpeechRecognition?: SpeechRecognitionCtor;
-      webkitSpeechRecognition?: SpeechRecognitionCtor;
-    };
-
-    const SpeechRecognition =
-      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      return;
-    }
-
     if (isListening) {
+      recognitionRef.current?.stop?.();
+      recognitionRef.current = null;
       setIsListening(false);
       return;
     }
 
+    const SpeechRecognition = getSpeechRecognitionConstructor(
+      window as unknown as SpeechRecognitionWindowLike
+    );
+
+    if (!SpeechRecognition) {
+      setAsrSupported(false);
+      setIsListening(false);
+      setAsrError(
+        'Browser SpeechRecognition is not supported in this browser. Type your phrase or pick a sample phrase below.'
+      );
+      return;
+    }
+
+    setAsrError(null);
+
+    let recognition: BrowserSpeechRecognition | null = null;
     try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = sourceLanguage === 'HI' ? 'hi-IN' : 'en-US';
+      recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = resolveSpeechRecognitionLocale(sourceLanguage);
       recognition.continuous = false;
       recognition.interimResults = false;
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onerror = () => setIsListening(false);
+      recognition.onstart = () => {
+        setIsListening(true);
+        setAsrError(null);
+      };
+      recognition.onend = () => {
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+        setIsListening(false);
+      };
+      recognition.onerror = (event?: BrowserSpeechRecognitionErrorEvent) => {
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+        setIsListening(false);
+        setAsrError(formatSpeechRecognitionError(event));
+      };
       recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
-        const transcript = event.results[0][0].transcript;
-        setInputText(transcript);
+        const transcript = event.results?.[0]?.[0]?.transcript?.trim() ?? '';
+        if (transcript) {
+          setInputText(transcript);
+          setAsrError(null);
+        }
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
         setIsListening(false);
       };
 
       recognition.start();
-    } catch {
+    } catch (err: unknown) {
+      if (recognition && recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
       setIsListening(false);
+      setAsrError(formatSpeechRecognitionError(err));
     }
   };
 
@@ -353,6 +396,14 @@ export default function SpeechToSignStudioPage() {
                 variant={isListening ? 'danger' : 'outline'}
                 size="sm"
                 onClick={toggleListening}
+                disabled={asrSupported !== true}
+                title={
+                  asrSupported === false
+                    ? 'Speech recognition is not supported in this browser'
+                    : asrSupported === null
+                    ? 'Checking browser speech recognition support...'
+                    : undefined
+                }
                 className="flex items-center gap-2"
               >
                 {isListening ? (
@@ -363,7 +414,7 @@ export default function SpeechToSignStudioPage() {
                 ) : (
                   <>
                     <Mic className="w-3.5 h-3.5 text-navy" />
-                    <span>Speak Mic</span>
+                    <span>{asrSupported === false ? 'Mic Unsupported' : 'Speak Mic'}</span>
                   </>
                 )}
               </Button>
@@ -380,6 +431,21 @@ export default function SpeechToSignStudioPage() {
                 <span>Generate Sign Animation</span>
               </Button>
             </div>
+
+            {asrSupported === false ? (
+              <UnsupportedFeatureNotice
+                feature="Browser Speech Recognition"
+                rationale="Web Speech API microphone dictation is not supported in this browser. Type a sentence or select a sample phrase below."
+              />
+            ) : asrError ? (
+              <div
+                role="alert"
+                className="p-3 rounded-lg bg-coral/15 border border-coral/40 text-ink text-xs flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 text-coral-dark flex-shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{asrError}</span>
+              </div>
+            ) : null}
           </Card>
 
           {apiError && (

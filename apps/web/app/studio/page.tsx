@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Video,
@@ -9,29 +9,56 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
+import { LoadingState, ErrorState } from '../../components/ui/FeedbackStates';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { apiClient } from '../../services/api';
+import { deriveConnectionStatus, getErrorMessage } from '../../services/apiError';
 import { SystemStatusData } from '../../types';
 
 export default function StudioDashboard() {
   const [systemStatus, setSystemStatus] = useState<SystemStatusData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const requestIdRef = useRef<number>(0);
+
+  const fetchSystemStatus = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setStatusError(null);
+
+    try {
+      const data = await apiClient.getSystemStatus();
+      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
+      setSystemStatus(data);
+    } catch (err: unknown) {
+      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
+      setSystemStatus(null);
+      setStatusError(
+        getErrorMessage(err, 'Unable to connect to the FastAPI backend.')
+      );
+    } finally {
+      if (isMountedRef.current && requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    apiClient
-      .getSystemStatus()
-      .then((data) => {
-        if (isMounted) {
-          setSystemStatus(data);
-        }
-      })
-      .catch(() => {});
+    isMountedRef.current = true;
+    fetchSystemStatus();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
-  }, []);
+  }, [fetchSystemStatus]);
+
+  const connectionState = deriveConnectionStatus({
+    isLoading,
+    hasData: systemStatus !== null,
+    error: statusError,
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col gap-10">
@@ -42,7 +69,10 @@ export default function StudioDashboard() {
             <span className="px-2.5 py-0.5 rounded-full bg-navy text-cyan text-xs font-mono font-semibold">
               MIRA-H Studio
             </span>
-            <StatusIndicator status={systemStatus ? 'online' : 'offline'} label={systemStatus ? 'API Ready' : 'API Connecting'} />
+            <StatusIndicator
+              status={connectionState.indicatorStatus}
+              label={connectionState.label}
+            />
           </div>
           <h1 className="font-display font-bold text-3xl text-ink tracking-tight">
             Assistive Communication Dashboard
@@ -171,7 +201,9 @@ export default function StudioDashboard() {
           </span>
         </div>
 
-        {systemStatus ? (
+        {isLoading && !systemStatus ? (
+          <LoadingState label="Connecting to FastAPI backend..." />
+        ) : systemStatus ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
             <div className="p-3 bg-cream/50 rounded-xl border border-ink/10">
               <span className="text-ink-muted block text-[11px]">CPU Usage</span>
@@ -212,9 +244,11 @@ export default function StudioDashboard() {
             </div>
           </div>
         ) : (
-          <div className="p-6 text-center text-xs font-mono text-ink-muted">
-            Connecting to FastAPI backend (http://localhost:8000)...
-          </div>
+          <ErrorState
+            title="Backend Unavailable"
+            message={statusError ?? 'Unable to connect to the FastAPI backend.'}
+            onRetry={fetchSystemStatus}
+          />
         )}
       </Card>
     </div>

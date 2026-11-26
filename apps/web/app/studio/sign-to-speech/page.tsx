@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useWebcam } from '../../../hooks/useWebcam';
 import { useMediaPipeLandmarks } from '../../../hooks/useMediaPipeLandmarks';
 import { WebcamPreview } from '../../../components/webcam/WebcamPreview';
@@ -12,30 +12,55 @@ import { LanguageSelector } from '../../../components/ui/LanguageSelector';
 import { Card } from '../../../components/ui/Card';
 import { apiClient } from '../../../services/api';
 import {
-  SignLanguage,
-  SpokenLanguage,
-  CandidateSign,
-  PredictionStatus,
-  TranslationResponse,
-  VisionFramePayload,
-} from '../../../types';
+  createSignToSpeechLifecycle,
+  getDefaultModelIdForLanguage,
+  SignToSpeechLifecycleState,
+} from '../../../services/signToSpeechLifecycle';
+import { SignLanguage, SpokenLanguage } from '../../../types';
 
 export default function SignToSpeechStudioPage() {
   const [signLanguage, setSignLanguage] = useState<SignLanguage>('ISL');
   const [spokenLanguage, setSpokenLanguage] = useState<SpokenLanguage>('EN');
-  const [sessionId, setSessionId] = useState<string>('');
+  const [lifecycle, setLifecycle] = useState<SignToSpeechLifecycleState>(() => ({
+    sessionId: '',
+    sessionMode: 'idle',
+    sessionNotice: null,
+    predictionStatus: 'not_processed',
+    topPrediction: null,
+    candidates: [],
+    modelName: getDefaultModelIdForLanguage('ISL'),
+    latencyMs: 0,
+    translation: null,
+    translationNotice: null,
+    isProcessingRequest: false,
+    frameBufferCount: 0,
+  }));
 
-  // Recognition state
-  const [predictionStatus, setPredictionStatus] = useState<PredictionStatus>('not_processed');
-  const [topPrediction, setTopPrediction] = useState<CandidateSign | null>(null);
-  const [candidates, setCandidates] = useState<CandidateSign[]>([]);
-  const [modelName, setModelName] = useState<string>('isl-geometric-heuristic-v1');
-  const [latencyMs, setLatencyMs] = useState<number>(0);
-  const [translation, setTranslation] = useState<TranslationResponse | null>(null);
+  const controllerRef = useRef<ReturnType<typeof createSignToSpeechLifecycle> | null>(null);
+  const wasStreamingRef = useRef<boolean>(false);
 
-  // Frame buffer for temporal recognition
-  const frameBufferRef = useRef<VisionFramePayload[]>([]);
-  const lastInferenceTimeRef = useRef<number>(0);
+  if (controllerRef.current === null) {
+    controllerRef.current = createSignToSpeechLifecycle({
+      initialSignLanguage: signLanguage,
+      api: {
+        createSession: (params) => apiClient.createSession(params),
+        terminateSession: (sessionId) => apiClient.terminateSession(sessionId),
+        predictSign: (params) => apiClient.predictSign(params),
+        translateGloss: (params) => apiClient.translateGloss(params),
+      },
+      onSnapshot: (nextState) => {
+        setLifecycle(nextState);
+      },
+    });
+  }
+
+  useEffect(() => {
+    const controller = controllerRef.current;
+    controller?.mount();
+    return () => {
+      controller?.unmount();
+    };
+  }, []);
 
   // Camera hook
   const {
@@ -51,88 +76,35 @@ export default function SignToSpeechStudioPage() {
   } = useWebcam();
 
   // MediaPipe Landmark hook
-  const { hands, fps, latestPayload } = useMediaPipeLandmarks(videoRef, isStreaming, sessionId);
+  const { hands, fps, latestPayload } = useMediaPipeLandmarks(
+    videoRef,
+    isStreaming,
+    lifecycle.sessionId
+  );
 
-  // Initialize or terminate backend session
+  // Synchronize camera stream start/stop with backend/local session lifecycle
   useEffect(() => {
-    let active = true;
-    if (isStreaming && !sessionId) {
-      apiClient
-        .createSession({
-          sign_language: signLanguage,
-          spoken_language: spokenLanguage,
-          mode: 'sign-to-speech',
-        })
-        .then((res) => {
-          if (active) setSessionId(res.session_id);
-        })
-        .catch(() => {
-          if (active) setSessionId(`local-${Date.now()}`);
-        });
-    } else if (!isStreaming && sessionId) {
-      apiClient.terminateSession(sessionId).catch(() => {});
-      setSessionId('');
-      setTopPrediction(null);
-      setCandidates([]);
-      setPredictionStatus('not_processed');
-      frameBufferRef.current = [];
+    const controller = controllerRef.current;
+    if (!controller) return;
+
+    if (isStreaming && !wasStreamingRef.current) {
+      wasStreamingRef.current = true;
+      void controller.startSession({ signLanguage, spokenLanguage });
+    } else if (!isStreaming && wasStreamingRef.current) {
+      wasStreamingRef.current = false;
+      controller.stopSession();
     }
+  }, [isStreaming, signLanguage, spokenLanguage]);
 
-    return () => {
-      active = false;
-    };
-  }, [isStreaming, sessionId, signLanguage, spokenLanguage]);
-
-  // Buffer frames and periodically execute recognition
+  // Buffer frames and execute rate-limited recognition & translation safely
   useEffect(() => {
-    if (!isStreaming || !latestPayload) return;
-
-    // Ingest frame into buffer
-    frameBufferRef.current.push(latestPayload);
-    if (frameBufferRef.current.length > 20) {
-      frameBufferRef.current.shift();
-    }
-
-    // Rate-limit API inference requests (every ~500ms)
-    const now = Date.now();
-    if (now - lastInferenceTimeRef.current >= 500 && frameBufferRef.current.length >= 5) {
-      lastInferenceTimeRef.current = now;
-      const bufferCopy = [...frameBufferRef.current];
-
-      apiClient
-        .predictSign({
-          session_id: sessionId || 'local-session',
-          sign_language: signLanguage,
-          frames: bufferCopy,
-          min_confidence_threshold: 0.60,
-        })
-        .then((pred) => {
-          setPredictionStatus(pred.status);
-          setTopPrediction(pred.top_prediction || null);
-          setCandidates(pred.candidates || []);
-          setModelName(pred.model_name);
-          setLatencyMs(pred.processing_duration_ms);
-
-          // If valid sign detected, request contextual translation
-          if (pred.top_prediction && pred.status === 'prediction_available') {
-            apiClient
-              .translateGloss({
-                source_sign_language: signLanguage,
-                target_spoken_language: spokenLanguage,
-                gloss_sequence: [pred.top_prediction.gloss],
-                confidence: pred.top_prediction.confidence,
-              })
-              .then((trans) => {
-                setTranslation(trans);
-              })
-              .catch(() => {});
-          }
-        })
-        .catch(() => {
-          setPredictionStatus('processing_failure');
-        });
-    }
-  }, [latestPayload, isStreaming, sessionId, signLanguage, spokenLanguage]);
+    if (!isStreaming || !latestPayload || !controllerRef.current) return;
+    void controllerRef.current.enqueueAndMaybePredict(latestPayload, {
+      signLanguage,
+      spokenLanguage,
+      nowMs: Date.now(),
+    });
+  }, [latestPayload, isStreaming, signLanguage, spokenLanguage]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
@@ -155,11 +127,17 @@ export default function SignToSpeechStudioPage() {
           spokenLanguage={spokenLanguage}
           onSignLanguageChange={(lang) => {
             setSignLanguage(lang);
-            setTopPrediction(null);
+            controllerRef.current?.resetOnLanguageChange({
+              signLanguage: lang,
+              resetPrediction: true,
+            });
           }}
           onSpokenLanguageChange={(lang) => {
             setSpokenLanguage(lang);
-            setTranslation(null);
+            controllerRef.current?.resetOnLanguageChange({
+              signLanguage,
+              resetTranslation: true,
+            });
           }}
           disabled={isStreaming}
         />
@@ -202,27 +180,49 @@ export default function SignToSpeechStudioPage() {
         <div className="lg:col-span-5 flex flex-col gap-6">
           <RecognitionPanel
             signLanguage={signLanguage}
-            status={predictionStatus}
-            topPrediction={topPrediction}
-            candidates={candidates}
-            modelName={modelName}
-            latencyMs={latencyMs}
+            status={lifecycle.predictionStatus}
+            topPrediction={lifecycle.topPrediction}
+            candidates={lifecycle.candidates}
+            modelName={lifecycle.modelName}
+            latencyMs={lifecycle.latencyMs}
           />
 
           <TranscriptPanel
-            translation={translation}
+            translation={lifecycle.translation}
             targetLanguage={spokenLanguage}
             onClear={() => {
-              setTranslation(null);
-              setTopPrediction(null);
+              controllerRef.current?.clearResults();
             }}
           />
+
+          {(lifecycle.sessionNotice || lifecycle.translationNotice) && (
+            <div className="flex flex-col gap-2">
+              {lifecycle.sessionNotice && (
+                <div
+                  role="status"
+                  className="p-3 rounded-xl bg-coral/15 border border-coral/40 text-ink text-xs flex items-start gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4 text-coral-dark flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{lifecycle.sessionNotice}</span>
+                </div>
+              )}
+              {lifecycle.translationNotice && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-xl bg-coral/15 border border-coral/40 text-ink text-xs flex items-start gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4 text-coral-dark flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{lifecycle.translationNotice}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Live Diagnostic Telemetry */}
           <Card className="p-4 flex flex-col gap-2 font-mono text-xs">
             <div className="flex items-center justify-between text-ink-muted">
               <span>Session ID:</span>
-              <span className="font-semibold text-ink">{sessionId || 'Standby'}</span>
+              <span className="font-semibold text-ink">{lifecycle.sessionId || 'Standby'}</span>
             </div>
             <div className="flex items-center justify-between text-ink-muted">
               <span>Hands Detected:</span>
@@ -230,7 +230,7 @@ export default function SignToSpeechStudioPage() {
             </div>
             <div className="flex items-center justify-between text-ink-muted">
               <span>Temporal Buffer:</span>
-              <span className="font-semibold text-ink">{frameBufferRef.current.length} frames</span>
+              <span className="font-semibold text-ink">{lifecycle.frameBufferCount} frames</span>
             </div>
           </Card>
         </div>

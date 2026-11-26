@@ -5,12 +5,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Cpu,
-  Layers,
-  Sparkles,
-  Eye,
   CheckCircle,
-  Activity,
-  Mic,
   MessageSquare
 } from 'lucide-react';
 import { StatusBadge } from '../../components/ui/StatusBadge';

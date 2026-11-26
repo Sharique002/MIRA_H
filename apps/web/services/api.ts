@@ -48,16 +48,22 @@ class ApiClient {
           typeof json.detail === 'string'
             ? json.detail
             : Array.isArray(json.detail)
-            ? json.detail.map((d: any) => d?.msg || JSON.stringify(d)).join('; ')
+            ? json.detail
+                .map((d: unknown) =>
+                  typeof d === 'object' && d !== null && 'msg' in d
+                    ? String((d as { msg: unknown }).msg)
+                    : JSON.stringify(d)
+                )
+                .join('; ')
             : undefined;
         throw new Error(
           json.error?.message || detailMsg || `API Error: ${response.status} ${response.statusText}`
         );
       }
       return json as ResponseEnvelope<T>;
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('API Request timed out after 10000ms');
       }
       throw err;
@@ -80,7 +86,7 @@ class ApiClient {
     sign_language: SignLanguage;
     spoken_language: SpokenLanguage;
     mode: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }): Promise<SessionData> {
     const res = await this.request<SessionData>('/api/v1/sessions', {
       method: 'POST',

@@ -193,7 +193,7 @@ export interface SessionData {
   updated_at: string;
   active_connections: number;
   frame_count: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ResponseEnvelope<T> {
@@ -202,7 +202,7 @@ export interface ResponseEnvelope<T> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
   correlation_id: string;
   timestamp: string;

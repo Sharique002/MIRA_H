@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, HelpCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { CandidateSign, PredictionStatus, SignLanguage } from '../../types';
 import { ConfidenceIndicator } from '../ui/ConfidenceIndicator';
 import { StatusBadge } from '../ui/StatusBadge';

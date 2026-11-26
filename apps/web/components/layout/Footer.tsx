@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { ShieldCheck, EyeOff, Cpu, Heart } from 'lucide-react';
+import { ShieldCheck, EyeOff } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (

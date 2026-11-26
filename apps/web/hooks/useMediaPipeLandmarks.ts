@@ -3,6 +3,28 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HandLandmarks, LandmarkPoint, VisionFramePayload } from '../types';
 
+interface MediaPipePoint {
+  x: number;
+  y: number;
+  z?: number;
+  visibility?: number;
+}
+
+interface MediaPipeCategory {
+  categoryName?: string;
+  score?: number;
+}
+
+interface MediaPipeDetectionResult {
+  landmarks?: MediaPipePoint[][];
+  handednesses?: MediaPipeCategory[][];
+}
+
+interface MediaPipeHandLandmarker {
+  detectForVideo: (video: HTMLVideoElement, timestampMs: number) => MediaPipeDetectionResult;
+  close: () => void;
+}
+
 interface UseMediaPipeReturn {
   hands: HandLandmarks[];
   fps: number;
@@ -39,7 +61,7 @@ export function useMediaPipeLandmarks(
   const [detectorReady, setDetectorReady] = useState(false);
   const [latestPayload, setLatestPayload] = useState<VisionFramePayload | null>(null);
 
-  const landmarkerRef = useRef<any>(null);
+  const landmarkerRef = useRef<MediaPipeHandLandmarker | null>(null);
   const animFrameId = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
@@ -122,11 +144,11 @@ export function useMediaPipeLandmarks(
         const extractedHands: HandLandmarks[] = [];
 
         if (results.landmarks && results.landmarks.length > 0) {
-          results.landmarks.forEach((landmarkList: any[], index: number) => {
+          results.landmarks.forEach((landmarkList: MediaPipePoint[], index: number) => {
             const handedness = results.handednesses?.[index]?.[0]?.categoryName || (index === 0 ? 'Right' : 'Left');
             const score = results.handednesses?.[index]?.[0]?.score || 0.95;
 
-            const points: LandmarkPoint[] = landmarkList.map((pt: any) => ({
+            const points: LandmarkPoint[] = landmarkList.map((pt: MediaPipePoint) => ({
               x: pt.x,
               y: pt.y,
               z: pt.z || 0.0,

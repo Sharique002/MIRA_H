@@ -22,7 +22,6 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = ({
   isStreaming,
   hands,
   fps,
-  permissionStatus,
   errorMessage,
   onActivate,
   width = 640,

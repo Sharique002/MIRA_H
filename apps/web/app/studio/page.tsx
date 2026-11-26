@@ -5,12 +5,7 @@ import Link from 'next/link';
 import {
   Video,
   ArrowRight,
-  Cpu,
-  Layers,
   Activity,
-  CheckCircle2,
-  Clock,
-  Sparkles,
   MessageSquare
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
@@ -21,7 +16,6 @@ import { SystemStatusData } from '../../types';
 
 export default function StudioDashboard() {
   const [systemStatus, setSystemStatus] = useState<SystemStatusData | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -30,12 +24,9 @@ export default function StudioDashboard() {
       .then((data) => {
         if (isMounted) {
           setSystemStatus(data);
-          setLoading(false);
         }
       })
-      .catch(() => {
-        if (isMounted) setLoading(false);
-      });
+      .catch(() => {});
 
     return () => {
       isMounted = false;

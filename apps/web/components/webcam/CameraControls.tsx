@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Camera, CameraOff, RefreshCw, Video } from 'lucide-react';
+import { Camera, CameraOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import type { AvatarPoseMap } from './keyframeTimeline';
 import type { SignSequenceItem } from '../../types';
 
 const require = createRequire(import.meta.url);
@@ -18,10 +19,9 @@ const {
   seekPlaybackToSign,
   hasPlayableDuration,
   clampDeltaMs,
-  createNeutralPoseMap,
 } = timelineMod;
 
-function assertAllNeutral(poses: ReturnType<typeof createNeutralPoseMap>, tol = 1e-9) {
+function assertAllNeutral(poses: AvatarPoseMap, tol = 1e-9) {
   for (const joint of PERMITTED_AVATAR_JOINTS) {
     assert.ok(Math.abs(poses[joint].pitch) <= tol, `${joint}.pitch expected 0, got ${poses[joint].pitch}`);
     assert.ok(Math.abs(poses[joint].yaw) <= tol, `${joint}.yaw expected 0, got ${poses[joint].yaw}`);

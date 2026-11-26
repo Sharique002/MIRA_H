@@ -80,7 +80,6 @@ export default function SpeechToSignStudioPage() {
 
   // Microphone ASR integration
   const [isListening, setIsListening] = useState(false);
-  const [asrSupported, setAsrSupported] = useState(true);
 
   // Tracks active target-language generation cycles so stale in-flight results
   // from a previous targetSignLanguage cannot populate state after switching.
@@ -180,10 +179,10 @@ export default function SpeechToSignStudioPage() {
       setIsCompleted(res.sequence.length > 0 && !playable);
       setSeekRequest(null);
       setIsPlaying(playable);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (activeCycle !== requestCycleRef.current) return;
       clearGeneratedState();
-      setApiError(err?.message || 'Unable to generate reverse sign sequence.');
+      setApiError(err instanceof Error ? err.message : 'Unable to generate reverse sign sequence.');
     } finally {
       if (activeCycle === requestCycleRef.current) {
         setIsLoading(false);
@@ -195,11 +194,29 @@ export default function SpeechToSignStudioPage() {
   const toggleListening = () => {
     if (typeof window === 'undefined') return;
 
+    interface BrowserSpeechRecognitionEvent {
+      results: ArrayLike<ArrayLike<{ transcript: string }>>;
+    }
+    interface BrowserSpeechRecognition {
+      lang: string;
+      continuous: boolean;
+      interimResults: boolean;
+      onstart: (() => void) | null;
+      onend: (() => void) | null;
+      onerror: (() => void) | null;
+      onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+      start: () => void;
+    }
+    type SpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setAsrSupported(false);
       return;
     }
 
@@ -217,7 +234,7 @@ export default function SpeechToSignStudioPage() {
       recognition.onstart = () => setIsListening(true);
       recognition.onend = () => setIsListening(false);
       recognition.onerror = () => setIsListening(false);
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setInputText(transcript);
         setIsListening(false);
@@ -226,7 +243,6 @@ export default function SpeechToSignStudioPage() {
       recognition.start();
     } catch {
       setIsListening(false);
-      setAsrSupported(false);
     }
   };
 

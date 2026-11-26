@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, ShieldCheck, Activity, Volume2, Sparkles, RefreshCw } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useWebcam } from '../../../hooks/useWebcam';
 import { useMediaPipeLandmarks } from '../../../hooks/useMediaPipeLandmarks';
 import { WebcamPreview } from '../../../components/webcam/WebcamPreview';
@@ -9,7 +9,6 @@ import { CameraControls } from '../../../components/webcam/CameraControls';
 import { RecognitionPanel } from '../../../components/recognition/RecognitionPanel';
 import { TranscriptPanel } from '../../../components/recognition/TranscriptPanel';
 import { LanguageSelector } from '../../../components/ui/LanguageSelector';
-import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Card } from '../../../components/ui/Card';
 import { apiClient } from '../../../services/api';
 import {

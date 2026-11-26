@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
-import { ShieldCheck, Eye, EyeOff, Sliders, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, EyeOff, Sliders, CheckCircle2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const [defaultSign, setDefaultSign] = useState('ISL');

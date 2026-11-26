@@ -96,15 +96,20 @@ export function useWebcam(): UseWebcamReturn {
       setIsStreaming(true);
       setPermissionStatus('granted');
       updateDeviceList();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsStreaming(false);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      const errName =
+        typeof err === 'object' && err !== null && 'name' in err
+          ? String((err as { name: unknown }).name)
+          : '';
+      const errMsg = err instanceof Error ? err.message : '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
         setPermissionStatus('denied');
         setErrorMessage('Camera access was denied. Please grant camera permission in your browser address bar.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
         setErrorMessage('No camera device detected on this system.');
       } else {
-        setErrorMessage(`Camera error: ${err.message || 'Unable to open camera.'}`);
+        setErrorMessage(`Camera error: ${errMsg || 'Unable to open camera.'}`);
       }
     }
   }, [selectedDeviceId, updateDeviceList]);

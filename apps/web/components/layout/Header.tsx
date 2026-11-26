@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Video, Cpu, BookOpen, Settings, Info, Menu, X, ShieldCheck } from 'lucide-react';
+import { Video, Cpu, BookOpen, Settings, Info, Menu, X } from 'lucide-react';
 import { StatusIndicator } from '../ui/StatusIndicator';
 import { apiClient } from '../../services/api';
 
@@ -33,8 +33,8 @@ export const Header: React.FC = () => {
   const navLinks = [
     { href: '/', label: 'Overview' },
     { href: '/studio', label: 'Studio Hub', icon: Video },
-    { href: '/studio/sign-to-speech', label: 'Sign &rarr; Speech' },
-    { href: '/studio/speech-to-sign', label: 'Speech &rarr; Sign' },
+    { href: '/studio/sign-to-speech', label: 'Sign → Speech' },
+    { href: '/studio/speech-to-sign', label: 'Speech → Sign' },
     { href: '/model-lab', label: 'Model Lab', icon: Cpu },
     { href: '/research', label: 'Research', icon: BookOpen },
     { href: '/about', label: 'About', icon: Info },
@@ -75,7 +75,7 @@ export const Header: React.FC = () => {
                 }`}
               >
                 {link.icon && <link.icon className="w-3.5 h-3.5" />}
-                <span dangerouslySetInnerHTML={{ __html: link.label }} />
+                <span>{link.label}</span>
               </Link>
             );
           })}
@@ -125,7 +125,7 @@ export const Header: React.FC = () => {
                   isActive ? 'bg-navy text-white' : 'text-ink hover:bg-black/5'
                 }`}
               >
-                <span dangerouslySetInnerHTML={{ __html: link.label }} />
+                <span>{link.label}</span>
               </Link>
             );
           })}

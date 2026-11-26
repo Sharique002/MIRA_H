@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Play, Square } from 'lucide-react';
+import { Volume2, VolumeX, Square } from 'lucide-react';
 import { Button } from './Button';
 
 interface AudioPlayerProps {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
-import { Database, GitFork, ShieldCheck, FileSpreadsheet } from 'lucide-react';
+import { Database, GitFork } from 'lucide-react';
 
 export default function ResearchPage() {
   const datasets = [

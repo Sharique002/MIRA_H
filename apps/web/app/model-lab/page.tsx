@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Cpu, Database, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2 } from 'lucide-react';
 import { ModelStatusCard } from '../../components/ui/ModelStatusCard';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingState, ErrorState } from '../../components/ui/FeedbackStates';
 import { apiClient } from '../../services/api';
@@ -20,8 +19,8 @@ export default function ModelLabPage() {
     try {
       const res = await apiClient.getModels();
       setModels(res.models);
-    } catch (err: any) {
-      setError(err.message || 'Failed to query model registry from backend.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to query model registry from backend.');
     } finally {
       setIsLoading(false);
     }
